@@ -45,12 +45,12 @@
 
 ## 1. 项目概述
 
-从 ROS2 Nav2 框架中解耦的 MPPI（Model Predictive Path Integral）控制器实现，采用 **C++17** 编写，适配 ROS1 环境。核心控制器与 Nav2 基础设施（rclcpp、nav2\_core、nav2\_costmap\_2d、pluginlib 等）**无依赖**，仅需标准 C++17 和头文件-only 的 `xtensor` 数值库，与RC-ESDF算法进行结合，将RC-ESDF的精确碰撞检测与解析梯度查询作为MPPI的一个避障批评项来提高MPPI的任意形状机器人动态避障灵活性与平滑性等。
+从 ROS2 Nav2 框架中解耦的 MPPI（Model Predictive Path Integral）控制器实现，采用 **C++17** 编写，适配 ROS1 环境。核心控制器与 Nav2 基础设施（rclcpp、nav2\_core、nav2\_costmap\_2d、pluginlib 等）**无依赖**，仅需标准 C++17 和头文件-only 的 `xtensor` 数值库，与 RC-ESDF 算法进行结合，利用其精确距离查询构建分区碰撞检测机制，并在风险区利用 RC-ESDF 解析梯度对 MPPI 采样进行偏置处理，引导采样轨迹向安全区域扩展，从而提高任意形状机器人动态避障的灵活性与平滑性等。
 
 ### 1.1 核心定位
 
 - **框架无关**：不依赖 ROS2/Nav2 生命周期节点、Costmap2D、pluginlib 等基础设施，可嵌入任意 C++ 项目
-- **激光雷达适配**：直接使用激光点云作为障碍物输入，通过自建BFS局部栅格距离场实现快速距离查询，无需依赖全局代价地图。局部距离场替代了原 Nav2-MPPI 的代价地图（costmap），将障碍物检测从依赖全局图层的集中式架构解耦为机器人自身的感知闭环。在此基础上该距离场模块可进一步结合 RC-ESDF（Robot-Centric Euclidean Signed Distance Field）进行拓展——RC-ESDF 以机器人本体为中心离线预计算符号距离场，支持任意多边形 footprint 的精确碰撞检测与解析梯度查询，在狭窄空间通过性和非圆形机器人避障方面具有显著优势，详情可参考 [SA-MPPI：基于 RC-ESDF 的任意形状机器人实时轨迹优化](https://blog.csdn.net/qq_56908984/article/details/160439414)
+- **激光雷达适配**：直接使用激光点云作为障碍物输入，通过自建BFS局部栅格距离场实现快速距离查询，无需依赖全局代价地图。局部距离场替代了原 Nav2-MPPI 的代价地图（costmap），将障碍物检测从依赖全局图层的集中式架构解耦为机器人自身的感知闭环。在此基础上该距离场模块可进一步结合 RC-ESDF（Robot-Centric Euclidean Signed Distance Field）进行拓展——RC-ESDF 以机器人本体为中心离线预计算符号距离场，支持任意多边形 footprint 的精确距离查询与碰撞判定；在与 MPPI 结合时，可构建碰撞区、风险区和安全区的分区碰撞检测机制，并在风险区利用其解析梯度对采样轨迹进行偏置，引导轨迹向安全区域扩展，在狭窄空间通过性和非圆形机器人避障方面具有显著优势，详情可参考 [SA-MPPI：基于 RC-ESDF 的任意形状机器人实时轨迹优化](https://blog.csdn.net/qq_56908984/article/details/160439414)
 - **轻量部署**：仅依赖 xtensor 数值库，编译简单，适合嵌入式和实时场景
 - **功能完整**：保留了 Nav2 MPPI 的核心算法逻辑，并增加了多项实用增强
 
@@ -1186,7 +1186,7 @@ for (size_t i = start_idx + 1; i < path_distances.size(); ++i) {
 | 特性    | 本项目                       | Nav2 MPPI                                    |
 | ----- | ------------------------- | -------------------------------------------- |
 | 障碍物来源 | 激光点云（直接输入）                | Costmap2D 全局代价地图                             |
-| 距离查询  | 自建局部栅格 BFS 距离场，可接入RC-ESDF | Costmap2D 膨胀层 + FootprintCollisionChecker    |
+| 距离查询  | 自建局部栅格 BFS 距离场，可接入 RC-ESDF 精确距离查询 | Costmap2D 膨胀层 + FootprintCollisionChecker    |
 | 动态障碍物 | 内置线性预测支持                  | 无（依赖代价地图更新）                                  |
 | 足迹检测  | 自实现坐标变换 + 栅格查询            | nav2\_costmap\_2d::FootprintCollisionChecker |
 
@@ -1211,7 +1211,7 @@ for (size_t i = start_idx + 1; i < path_distances.size(); ++i) {
 | **路径阻塞检测**    | PathAlignCritic 在路径被大量阻塞时自动失效    | 基础实现        |
 | **动态障碍物预测**   | ObstaclesCritic 支持基于速度的动态障碍物位置预测 | 无（依赖代价地图更新） |
 | **启动辅助**      | 解决零速度启动困境/代码冗余/无效                        | 无此功能        |
-| **任意形状机器人避碰**      | 避障critic接入RC-ESDF                        | 无此功能        |
+| **任意形状机器人避碰**      | 结合 RC-ESDF 构建分区碰撞检测，风险区用解析梯度进行采样偏置                        | 无此功能        |
 
 
 ### 12.5 Critic 差异
@@ -1219,7 +1219,7 @@ for (size_t i = start_idx + 1; i < path_distances.size(); ++i) {
 | Critic                 | 本项目           | Nav2 MPPI  |
 | ---------------------- | ------------- | ---------- |
 | CostCritic             | 无             | 有（基于代价地图值） |
-| ObstaclesCritic        | BFS栅格距离场+ RC-ESDF + 动态预测  | 代价地图膨胀层查询  |
+| ObstaclesCritic        | BFS栅格距离场 + RC-ESDF分区碰撞检测 + 动态预测  | 代价地图膨胀层查询  |
 | PathAlignCritic        | 路径阻塞检测 + 朝向考虑 | 基础实现       |
 | PathAngleCritic        | 三种角度模式        | 三种角度模式     |
 | VelocityDeadbandCritic | 有             | 有          |
@@ -1283,4 +1283,3 @@ You should have received a copy of the GNU General Public License along with thi
 ### 14.4 相关博客
 
 - [MPPI 局部路径规划控制器 —— 从 Nav2 解耦的模块化 ROS1 实现](https://blog.csdn.net/qq_56908984/article/details/158774722?sharetype=blogdetail\&sharerId=158774722\&sharerefer=PC\&sharesource=qq_56908984\&spm=1011.2480.3001.8118)
-
