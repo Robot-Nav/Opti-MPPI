@@ -45,12 +45,12 @@
 
 ## 1. Project Overview
 
-A decoupled implementation of the MPPI (Model Predictive Path Integral) controller extracted from the ROS2 Nav2 framework, written in **C++17** and adapted for the ROS1 environment. The core controller has **no dependencies** on Nav2 infrastructure (rclcpp, nav2\_core, nav2\_costmap\_2d, pluginlib, etc.), requiring only standard C++17 and the header-only `xtensor` numerical library. Combined with the RC-ESDF algorithm, it integrates RC-ESDF's precise collision detection and analytical gradient queries as an obstacle avoidance critic term in MPPI, improving the flexibility and smoothness of dynamic obstacle avoidance for arbitrarily shaped robots.
+A decoupled implementation of the MPPI (Model Predictive Path Integral) controller extracted from the ROS2 Nav2 framework, written in **C++17** and adapted for the ROS1 environment. The core controller has **no dependencies** on Nav2 infrastructure (rclcpp, nav2\_core, nav2\_costmap\_2d, pluginlib, etc.), requiring only standard C++17 and the header-only `xtensor` numerical library. Combined with the RC-ESDF algorithm, it builds a zoned collision detection mechanism based on RC-ESDF's precise distance queries. In the risk zone, RC-ESDF's analytical gradient is used to bias MPPI sampling, guiding candidate trajectories to expand toward safer regions and improving the flexibility and smoothness of dynamic obstacle avoidance for arbitrarily shaped robots.
 
 ### 1.1 Core Positioning
 
 - **Framework Agnostic**: No dependency on ROS2/Nav2 lifecycle nodes, Costmap2D, pluginlib, or other infrastructure — embeddable into any C++ project
-- **LIDAR Native**: Directly uses laser point clouds as obstacle input, building a local BFS grid distance field for fast distance queries without relying on global costmaps. The local distance field replaces Nav2-MPPI's costmap dependency, decoupling obstacle detection from centralized global layers to a robot-centric perception loop. This distance field module can further integrate RC-ESDF (Robot-Centric Euclidean Signed Distance Field), which precomputes signed distance fields offline centered on the robot, supporting precise collision detection and analytical gradient queries for arbitrary polygon footprints. It offers significant advantages in narrow-space navigation and non-circular robot obstacle avoidance. See [SA-MPPI: Real-time Trajectory Optimization for Arbitrarily Shaped Robots Based on RC-ESDF](https://blog.csdn.net/qq_56908984/article/details/160439414) for details.
+- **LIDAR Native**: Directly uses laser point clouds as obstacle input, building a local BFS grid distance field for fast distance queries without relying on global costmaps. The local distance field replaces Nav2-MPPI's costmap dependency, decoupling obstacle detection from centralized global layers to a robot-centric perception loop. This distance field module can further integrate RC-ESDF (Robot-Centric Euclidean Signed Distance Field), which precomputes signed distance fields offline centered on the robot, supporting precise distance queries and zoned collision detection for arbitrary polygon footprints. In the risk zone, its analytical gradient can be used to bias MPPI sampling and guide candidate trajectories toward safer regions. It offers significant advantages in narrow-space navigation and non-circular robot obstacle avoidance. See [SA-MPPI: Real-time Trajectory Optimization for Arbitrarily Shaped Robots Based on RC-ESDF](https://blog.csdn.net/qq_56908984/article/details/160439414) for details.
 - **Lightweight Deployment**: Depends only on xtensor, simple compilation, suitable for embedded and real-time scenarios
 - **Feature Complete**: Retains the core algorithm logic of Nav2 MPPI with several practical enhancements
 
@@ -1188,7 +1188,7 @@ for (size_t i = start_idx + 1; i < path_distances.size(); ++i) {
 | Feature | This Project | Nav2 MPPI |
 | --- | --- | --- |
 | Obstacle Source | Laser point cloud (direct input) | Costmap2D global costmap |
-| Distance Query | Self-built local grid BFS distance field, can integrate RC-ESDF | Costmap2D inflation layer + FootprintCollisionChecker |
+| Distance Query | Self-built local grid BFS distance field, can integrate RC-ESDF for zoned collision detection and risk-zone gradient-biased sampling | Costmap2D inflation layer + FootprintCollisionChecker |
 | Dynamic Obstacles | Built-in linear prediction support | None (relies on costmap updates) |
 | Footprint Detection | Self-implemented coordinate transform + grid query | nav2\_costmap\_2d::FootprintCollisionChecker |
 
@@ -1213,14 +1213,14 @@ Additional features built on top of Nav2 MPPI:
 | **Path Blocking Detection** | PathAlignCritic auto-disabled when path heavily blocked | Basic implementation |
 | **Dynamic Obstacle Prediction** | ObstaclesCritic supports velocity-based dynamic obstacle position prediction | None (relies on costmap updates) |
 | **Startup Assist** | Resolves zero-velocity startup issues / redundant, ineffective | Not present |
-| **Arbitrary Shape Robot Collision Avoidance** | Obstacle critic integrates RC-ESDF | Not present |
+| **Arbitrary Shape Robot Collision Avoidance** | Builds RC-ESDF-based zoned collision detection; risk-zone analytical gradients bias MPPI sampling | Not present |
 
 ### 12.5 Critic Differences
 
 | Critic | This Project | Nav2 MPPI |
 | --- | --- | --- |
 | CostCritic | None | Present (based on costmap values) |
-| ObstaclesCritic | BFS grid distance field + RC-ESDF + dynamic prediction | Costmap inflation layer query |
+| ObstaclesCritic | BFS grid distance field + RC-ESDF zoned collision detection + risk-zone gradient-biased sampling + dynamic prediction | Costmap inflation layer query |
 | PathAlignCritic | Path blocking detection + heading consideration | Basic implementation |
 | PathAngleCritic | Three angle modes | Three angle modes |
 | VelocityDeadbandCritic | Present | Present |
