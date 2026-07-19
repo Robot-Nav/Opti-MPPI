@@ -11,7 +11,7 @@
 
 > **Declaration**: [👉 README_CN ](https://github.com/Robot-Nav/SA-MPPI/blob/main/README_CN.md)This repository is a decoupled version of the MPPI local planner from Navigation2. Due to limited technical expertise, there may be some "hacky" modifications and non-standard code. Some implementation logic may differ from the original version. **The code is under continuous development**. If there are any inaccuracies, please feel free to point them out — your understanding is greatly appreciated! Issues and PRs are welcome.
 
-> [Friendly reminder](https://github.com/Robot-Nav/SA-MPPI/issues/2)
+> [Friendly reminder](https://github.com/Robot-Nav/SA-MPPI/issues/2)：Some suggestions
 
 > **Highly recommend website**：[👉 Different MPPI ](http://robotics-tutorial.dmbot.cn/04_%E7%A7%BB%E5%8A%A8%E6%9C%BA%E5%99%A8%E4%BA%BA%E8%A7%84%E6%8E%A7/20_%E9%87%87%E6%A0%B7%E5%BC%8FMPC/40_MPPI%E5%85%AD%E5%A4%A7%E5%8F%98%E4%BD%93/#rmppi)
 > <img width="1056" height="622" alt="image" src="https://github.com/user-attachments/assets/de6184a6-7b1b-442a-9997-b3f97421c26e" />
