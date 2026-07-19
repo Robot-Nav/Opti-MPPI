@@ -11,7 +11,7 @@
 
 > **声明**：本仓库是对 Navigation2 中 MPPI 局部规划器的解耦版本。由于个人技术能力有限，代码中存在一些"魔改"痕迹与不规范之处，部分实现逻辑可能与原版存在差异，**代码实时更新中**。如有不当之处，还望各位大佬多多指正，感谢包容！欢迎提 Issue 或 PR 一起完善。
 
->[友情提醒](https://github.com/Robot-Nav/SA-MPPI/issues/2) 
+>[友情提醒](https://github.com/Robot-Nav/SA-MPPI/issues/2) ：一些建议
 
 > **强烈推荐 Website**：[👉 MPPI变种 ](http://robotics-tutorial.dmbot.cn/04_%E7%A7%BB%E5%8A%A8%E6%9C%BA%E5%99%A8%E4%BA%BA%E8%A7%84%E6%8E%A7/20_%E9%87%87%E6%A0%B7%E5%BC%8FMPC/40_MPPI%E5%85%AD%E5%A4%A7%E5%8F%98%E4%BD%93/#rmppi)
 > <img width="1056" height="622" alt="image" src="https://github.com/user-attachments/assets/de6184a6-7b1b-442a-9997-b3f97421c26e" /> 
