@@ -1,0 +1,189 @@
+dc_pmppi_node:
+  # =========================
+  # MPPI 核心
+  # =========================
+  batch_size: 400             # Gazebo稳健基线；实测求解超时后再按比例下调
+  time_steps: 40              # 预测时域步数（40×0.05=2.0s）
+  model_dt: 0.05              # 模型离散时间步长 [s]
+  iteration_count: 1          # MPPI 优化迭代次数
+  control_period_ms: 50       # 控制指令下发周期 [ms]
+  thread_count: 4             # 并行采样线程数（也用于 MPCCTrackingCritic 并行评分）
+  random_seed: 42             # 固定采样种子，保证真实Gazebo重复试验可复现
+
+  temperature: 0.60                      # 温度参数，越大探索越激进
+  gamma: 0.015                           # 折扣因子（指数衰减权重）
+  adaptive_temperature: true             # 以目标ESS自动调整温度，降低代价尺度敏感性
+  adaptive_temperature_min: 0.10         # 自适应温度下限
+  adaptive_temperature_max: 3.00         # 自适应温度上限
+  target_ess_ratio: 0.15                  # 目标有效样本比例
+  use_mean_normalization: false          # 是否用均值替代 min 做代价归一化
+  elite_sample_count: 0                   # 正式默认关闭；消融时设60（实测提精度但增加角加速度RMS）
+  elite_update_rate: 1.0                  # CEM均值更新率；仅elite_sample_count>0时生效
+
+  # 时间相关噪声，减少白噪声控制序列的锯齿
+  noise_correlation: 0.85      # 正式默认使用AR低频噪声；0=白噪声，1=完全相关
+  sample_control_derivatives: false # 实测提精度但增加角加速度RMS，正式默认关闭
+  control_derivative_noise_scale: 0.10 # 增量噪声相对vx_std/wz_std的比例
+  sampling_support_points: 0   # 正式默认关闭KMPPI；消融时设10并将noise_correlation设0
+  sampling_kernel_sigma: 1.0   # 支持点坐标中的RBF核宽度
+  reuse_noise_sequence: true   # 跨周期左移低频样本，抑制相邻优化周期的随机跳变
+  noise_cycle_correlation: 0.98 # 保留98%左移样本，仅注入正交归一的新RBF探索
+  nominal_sample_count: 1      # 零噪声名义控制序列的份数（保证至少一条平滑轨迹）
+  antithetic_sampling: true    # 正负成对采样，降低有限样本方差
+  guided_sampling_ratio: 0.25  # 25% rollout 使用曲率前馈引导分布
+  guided_sampling_blend: 0.80  # 引导分布与原始高斯样本的融合比例
+  vx_std: 0.20                 # x 方向速度噪声标准差 [m/s]
+  vy_std: 0.0                  # y 方向速度噪声标准差 [m/s]（差速模型禁用）
+  wz_std: 0.35                 # 角速度噪声标准差 [rad/s]
+
+  shift_control_sequence: true   # 是否滑窗偏移上轮最优序列作为本轮初值
+  use_sg_filter: true            # 当前稳定版：历史命令+未来序列保形平滑，随后重施三轮约束
+
+  # 2.0 s 预测域；0.6 m/s 标称速度约前进 1.2 m，保留充足路径余量
+  prune_distance: 3.5              # 路径裁剪距离：仅保留车前方此范围内的路径点 [m]
+  furthest_reached_quantile: 0.85  # 最远到达分位数，用于确定轨迹终点
+
+  # =========================
+  # 路径预处理
+  # =========================
+  path_resample_spacing: 0.10       # 路径重采样等距间距 [m]
+  path_duplicate_epsilon: 0.005     # 路径点去重距离阈值 [m]
+  use_path_goal_orientation: false  # 是否取路径末点自带朝向（否则用切线方向）
+
+  # =========================
+  # 运动约束
+  # =========================
+  vx_max: 0.70    # 三轮缩比底盘最大前进速度 [m/s]
+  vx_min: 0.0     # 最小前进速度（禁止倒车）
+  vy_max: 0.0     # 最大横向速度（差速模型为 0）
+  wz_max: 1.0     # 最大角速度 [rad/s]
+  ax_max: 1.2     # 最大纵向加速度 [m/s²]
+  ay_max: 0.0     # 主动横向速度/加速度禁用；外部侧滑仅作为扰动估计
+  az_max: 2.5     # 最大角加速度 [rad/s²]
+
+  motion_model: "Ackermann"             # Twist接口，内部按三轮/Ackermann运动学预测
+  ackermann_min_turning_radius: 0.50    # 轴距0.500m时等效前轮转角上限45.000°
+
+  # =========================
+  # MPCC 式纯跟踪目标与参考控制
+  # =========================
+  path_reference_speed: 0.60             # 横向加速度约束下的标称巡航速度 [m/s]
+  path_max_lateral_acceleration: 0.60    # 曲率连续限速的横向加速度 [m/s²]
+  path_corner_preview_distance: 1.20     # 前视未来曲率，按制动包络提前降速 [m]
+  path_corner_deceleration: 0.90         # 急弯预减速允许的纵向减速度 [m/s²]
+  heading_alignment_start: 3.00          # Ackermann禁止原地转向，依靠有限半径圆弧对准
+  heading_alignment_stop: 3.14           # 不因大航向差把前进速度门控到零
+  disturbance_heading_gate_scale: 1.00   # 保持与名义工况一致的航向门控
+  corner_alignment_distance: 0.0         # 综合模式不强制在几何拐点原地转向
+  corner_approach_distance: 0.0          # 由MPPI在误差/时长间自主选择圆角轨迹
+  corner_alignment_min_angle: 0.60       # 仅处理大于该转角的非连续拐点 [rad]
+  corner_alignment_yaw_tolerance: 0.08   # 急弯对准误差阈值 [rad]
+  corner_alignment_gain: 2.80            # 急弯原地旋转比例增益
+  corner_alignment_max_yaw_rate: 1.60    # 急弯旋转角速度限幅 [rad/s]
+  goal_deceleration: 0.50                # 终点制动模型减速度 [m/s²]
+  guide_lateral_gain: 1.80               # 前馈引导的横向误差反馈增益
+  guide_heading_gain: 2.20               # 前馈引导的航向误差反馈增益
+  curvature_consistent_speed: 0.0        # Ackermann模型已约束曲率，避免大航向差时误抑制转向
+  ancillary_lateral_gain: 1.20           # RMPPI式实际状态-名义路径辅助反馈
+  ancillary_heading_gain: 1.40           # 航向辅助反馈（受角速度限幅保护）
+  ancillary_max_yaw_rate: 0.35           # 辅助反馈最大角速度修正 [rad/s]
+  ancillary_nominal_scale: 0.0           # 无扰动时避免与MPPI曲率前馈重复校正
+  ancillary_disturbance_scale: 0.35      # 弯道保留低增益反馈，直线由曲率门控抑制重复补偿
+  ancillary_curvature_activation: 0.02  # 直线抑制重复反馈，非零曲率段快速恢复
+
+  mpcc_weight: 8.0
+  mpcc_contour_weight: 2.2               # 强化几何轮廓跟踪，抑制矩形内切
+  mpcc_lag_weight: 0.35                  # 在可行圆角轨迹上平衡进度和几何误差
+  mpcc_heading_weight: 1.10              # 路径切向航向误差
+  mpcc_velocity_weight: 0.25             # 避免为追速度突破弯道动态边界
+  mpcc_yaw_rate_weight: 0.20             # ω-vκ 前馈误差
+  mpcc_terminal_weight: 2.0              # 终端位置、朝向和停车代价
+  mpcc_contour_scale: 0.16               # 轮廓误差归一化尺度 [m]
+  mpcc_lag_scale: 0.35                   # 滞后/终点位置误差尺度 [m]
+  mpcc_heading_scale: 0.40               # 航向误差尺度 [rad]
+  mpcc_velocity_scale: 0.40              # 速度误差尺度 [m/s]
+  mpcc_yaw_rate_scale: 0.80              # 角速度误差尺度 [rad/s]
+  mpcc_traj_step: 2                      # 每隔两步评分，控制计算时间
+
+  # =========================
+  # 控制平滑 Critic
+  # =========================
+  control_rate_weight: 2.0           # 控制变化率平滑代价权重（总）
+  control_rate_vx_weight: 0.50       # 线速度变化率权重
+  control_rate_wz_weight: 1.0        # 角速度变化率权重
+  control_rate_vx_scale: 1.20        # 线速度变化到代价的缩放（越小越敏感）
+  control_rate_wz_scale: 2.50        # 角速度变化到代价的缩放（越小越敏感）
+  control_rate_traj_step: 1          # 控制变化率评估间隔步数
+
+  # 终点完成判定只用于停止状态确认；减速已包含在连续参考速度中
+  goal_tolerance: 0.10             # 10cm内进入位置保持，统一评测阈值为15cm
+  goal_yaw_tolerance: 3.14         # 本基准只考核位置到达；终点不强制指定姿态
+  goal_speed_tolerance: 0.08       # 与统一评测的静止线速度阈值一致 [m/s]
+  goal_yaw_rate_tolerance: 0.08    # 静止角速度阈值 [rad/s]
+  goal_settle_cycles: 2            # 快速进入保持；外部评测仍独立要求稳定0.5s
+  goal_reacquire_distance: 0.15    # 与统一到达半径一致，避免扰动下停止/重捕获抖振 [m]
+  goal_reacquire_yaw: 3.14         # 到达保持只按位置判定
+  goal_docking_distance: 0.20      # 终点位姿稳定器开始平滑融合 [m]
+  goal_docking_full_control_distance: 0.12 # 完全接管距离 [m]
+  goal_docking_max_speed: 0.18     # 精确靠站最大线速度 [m/s]
+  goal_recovery_distance: 1.20     # 终点外停滞时允许重新捕获的距离 [m]
+  goal_recovery_speed_threshold: 0.08 # 名义速度低于该值才触发重捕获 [m/s]
+  goal_recovery_max_speed: 0.35    # 重捕获阶段最大线速度 [m/s]
+  goal_docking_distance_gain: 1.20
+  goal_docking_bearing_gain: 2.50
+  goal_docking_pose_alignment_gain: 0.80 # 极坐标终端位姿稳定器的最终航向耦合增益
+  goal_docking_final_yaw_gain: 0.0 # 位置基准中只抵消横摆扰动，不追终点姿态
+
+  # =========================
+  # DC-PMPPI 扰动补偿（保留用于滑移等工况）
+  # =========================
+  dc_pmppi_enabled: false                 # 默认先验证无补偿基线；A/B时显式改为true
+  dc_corner_suppression_enabled: false    # 综合模式保持连续DC补偿
+  dc_corner_suppression_distance: 0.60    # 仅在急弯实际接近段门控补偿 [m]
+  dc_corner_suppression_hold_time: 0.50   # 旋转完成后快速恢复DC模型 [s]
+  dc_corner_suppression_min_angle: 0.60   # 只对非连续大转角生效 [rad]
+  sample_disturbance_uncertainty: false    # Gazebo禁用sigma rollout，避免放大估计噪声
+  disturbance_sigma_clip: 2.0             # 扰动采样的 sigma 截断倍数
+  disturbance_decay_time_constant: 0.8     # 与Gazebo slip_ou_tau一致 [s]
+  min_traction_scale: 0.35                # 扰动严重度仅保留为诊断量
+  traction_speed_exponent: 0.0            # η_v已显式辨识，禁止重复降低速度约束
+  traction_acceleration_exponent: 0.0     # η_v/η_ω已入模型，禁止重复降低加速度约束
+
+  dc_pmppi_filter_time_constant: 0.20     # 在OU扰动变化前完成估计，同时抑制定位噪声 [s]
+  dc_pmppi_effectiveness_time_constant: 1.50 # 慢速辨识控制有效性，避免短时漂移污染 [s]
+  dc_pmppi_use_centered_effectiveness_regression: false # 闭环OU扰动下实测未胜出，默认回退稳健比值法
+  dc_pmppi_effectiveness_excitation_variance: 0.0025 # 指令方差不足时回退稳健比值估计
+  dc_pmppi_longitudinal_actuator_time_constant: 0.10 # 显式匹配vehicleSimulator电机一阶滞后 [s]
+  dc_pmppi_yaw_actuator_time_constant: 0.0 # 当前仿真横摆通道无额外一阶滞后 [s]
+  dc_pmppi_confidence_time_constant: 0.50 # 扰动补偿渐进启用时间常数 [s]
+  dc_pmppi_minimum_confidence: 0.25       # 低于阈值时保持名义MPPI，避免启动瞬态误补偿
+  dc_pmppi_compensation_gain: 0.85        # 置信度之外的总补偿增益，抑制多处注入导致的过补偿
+  dc_pmppi_pose_velocity_window: 0.10     # 位姿差分速度窗口，抑制高频定位噪声 [s]
+  dc_pmppi_max_sample_interval: 0.50      # 最大采样间隔（超过则重置先验）[s]
+  dc_pmppi_vy_deadzone: 0.02              # vy 死区 [m/s]
+  dc_pmppi_wz_deadzone: 0.02              # wz 死区 [rad/s]
+  dc_pmppi_max_vy: 0.50                   # DC 模式下允许的最大横向速度 [m/s]
+  dc_pmppi_max_wz_dist: 1.00             # DC 模式下 wz 上限对应距离阈值 [m]
+  dc_pmppi_vy_std_floor: 0.01            # vy 噪声标准差下限 [m/s]
+  dc_pmppi_wz_std_floor: 0.01            # wz 噪声标准差下限 [rad/s]
+  dc_pmppi_command_speed_deadzone: 0.40  # 仅在充分纵向激励下辨识eta_v [m/s]
+  dc_pmppi_command_yaw_rate_deadzone: 0.30 # 仅在充分横摆激励下辨识eta_w [rad/s]
+  dc_pmppi_max_vy_innovation: 0.40       # 单次侧向观测创新限幅 [m/s]
+  dc_pmppi_max_wz_innovation: 0.80       # 单次横摆观测创新限幅 [rad/s]
+  dc_pmppi_use_odom_twist_lateral_velocity: true # Gazebo /odom1 直接发布真实actualLateralSpeed
+  dc_pmppi_use_odom_twist_yaw_rate: true  # Gazebo /odom1 直接发布真实actualYawRate
+  dc_pmppi_use_odom_twist_longitudinal_velocity: true # Gazebo /odom1 直接发布真实actualLongitudinalSpeed
+  traction_lateral_gain: 1.5              # 牵引力对横向速度的增益
+  traction_yaw_gain: 0.8                  # 牵引力对角速度的增益
+  longitudinal_effectiveness: 1.0         # 纵向控制效率（1.0=理想路面）
+  yaw_effectiveness: 1.0                  # 横摆控制效率（1.0=理想路面）
+  dc_pmppi_use_executed_command: true     # 优先用约束器真正执行的命令估计模型残差
+  dc_pmppi_executed_command_topic: "/constrained_cmd_vel_stamped"
+  dc_pmppi_executed_command_timeout: 0.20 # 执行命令超时后自动回退到原始cmd历史 [s]
+  dc_pmppi_actuator_delay: 0.05           # 仅原始cmd回退路径使用的时间对齐延迟 [s]
+
+  odom_timeout: 0.30           # 里程计超时时间 [s]
+  odom_topic: "/odom1"        # 仿真与实物统一里程计话题
+  planning_frame: "map"        # 规划参考坐标系
+  strict_frame_check: true     # 是否严格校验坐标系一致性
+  collect_critic_statistics: false # 调参时可开；关闭可省去每周期代价数组拷贝
