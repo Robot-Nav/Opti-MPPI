@@ -14,6 +14,10 @@
 > A ROS1 local path-tracking controller designed for low-adhesion and externally disturbed conditions such as slippery roads and oscillating decks.  
 > On top of the standard MPPI sampling-based optimization framework, it introduces equivalent disturbance estimation and control-effectiveness identification so that the prediction model remains consistent with the actual controlled system, significantly improving trajectory-tracking accuracy under slip conditions while preserving real-time computation.
 
+
+**对比结果**：
+<img width="1440" height="820" alt="image" src="https://github.com/user-attachments/assets/6d892430-ef3b-46b6-b5ae-a4322b14bd14" />
+
 ---
 
 ## Table of Contents
